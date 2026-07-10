@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Bracket",
+  "version": "1.2.0",
+  "description": "Unified tool system for AI chat interfaces — memory, chess, browse, and more via bracket commands.",
+  "permissions": ["storage", "unlimitedStorage", "tabs"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/c/*",
+    "https://chat.deepseek.com/*",
+    "https://*.deepseek.com/*",
+    "https://gemini.google.com/app/*",
+    "https://www.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://api.steampowered.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://chatgpt.com/c/*",
+        "https://chat.deepseek.com/*",
+        "https://*.deepseek.com/*",
+        "https://gemini.google.com/app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Bracket"
+  }
+}

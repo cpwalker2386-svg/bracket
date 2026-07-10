@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "chess.js": "^1.4.0",
+    "stockfish": "^18.0.8"
+  }
+}

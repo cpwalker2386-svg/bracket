@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 270px;
+      font-family: monospace;
+      font-size: 12px;
+      background: #111827;
+      color: #d1d5db;
+    }
+
+    /* ── Header ── */
+    #header {
+      padding: 10px 12px 9px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #title { font-size: 13px; color: #e5e7eb; letter-spacing: 0.05em; }
+
+    #kill-all-wrap { display: flex; align-items: center; gap: 5px; }
+    .hdr-btn {
+      font-family: monospace;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid;
+    }
+    #kill-all-btn  { background: #1c1410; color: #f97316; border-color: #f97316; }
+    #kill-confirm  { background: #7c1d1d; color: #fca5a5; border-color: #f87171; display:none; }
+    #kill-deny     { background: #1f2937; color: #6b7280; border-color: #374151; display:none; }
+
+    /* ── Ambient toggles ── */
+    #ambient-panel {
+      padding: 8px 12px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .toggle-label {
+      color: #9ca3af;
+      font-size: 10px;
+      flex: 1;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 28px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #374151;
+      border-radius: 15px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-slider:before {
+      content: '';
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      left: 2px;
+      top: 2px;
+      background: #9ca3af;
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+    input:checked + .toggle-slider { background: #166534; }
+    input:checked + .toggle-slider:before { transform: translateX(13px); background: #86efac; }
+
+    /* threshold input */
+    .threshold-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .threshold-label { color: #6b7280; font-size: 10px; flex: 1; }
+    #threshold-input {
+      width: 40px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 3px;
+      color: #d1d5db;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 2px 4px;
+      text-align: center;
+    }
+    #threshold-input:focus { outline: none; border-color: #6b7280; }
+
+    /* ── Search ── */
+    #search-wrap {
+      padding: 7px 12px;
+      border-bottom: 1px solid #1f2937;
+    }
+    #search {
+      width: 100%;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 4px;
+      color: #d1d5db;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 4px 8px;
+      outline: none;
+    }
+    #search::placeholder { color: #4b5563; }
+    #search:focus { border-color: #6b7280; }
+
+    /* ── Views ── */
+    #list-view, #detail-view { display: none; }
+    #list-view.active, #detail-view.active { display: block; }
+
+    /* ── Tool rows ── */
+    .tool-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid #1a2332;
+      gap: 6px;
+    }
+    .tool-row.hidden { display: none; }
+
+    .tool-main {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex: 1;
+      cursor: pointer;
+      min-width: 0;
+    }
+    .tool-main:hover .tool-label { color: #f9fafb; }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #374151;
+      flex-shrink: 0;
+    }
+    .dot.online  { background: #86efac; }
+    .dot.offline { background: #4b5563; }
+
+    .tool-icon  { font-size: 12px; }
+    .tool-label { color: #e5e7eb; flex: 1; }
+    .tool-count { color: #4b5563; font-size: 10px; white-space: nowrap; }
+    .tool-arrow { color: #374151; font-size: 10px; margin-left: 2px; }
+
+    .stop-cluster { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .stop-btn, .stop-confirm, .stop-deny {
+      font-family: monospace;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .stop-btn     { background: #1c1410; color: #f97316; border-color: #7c2d12; }
+    .stop-confirm { background: #7c1d1d; color: #fca5a5; border-color: #f87171; display:none; }
+    .stop-deny    { background: #1f2937; color: #6b7280; border-color: #374151; display:none; }
+
+    /* ── Detail view ── */
+    #detail-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #1f2937;
+      cursor: pointer;
+    }
+    #detail-header:hover { background: #1a2332; }
+    #back-btn     { color: #6b7280; font-size: 11px; flex-shrink: 0; }
+    #detail-title { color: #e5e7eb; font-size: 12px; flex: 1; }
+    #detail-online { font-size: 10px; flex-shrink: 0; }
+
+    #detail-body { padding: 10px 12px; }
+    .cmd-group { margin-bottom: 11px; }
+    .cmd-group-label {
+      color: #4b5563;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .cmd-item {
+      color: #6b7280;
+      font-size: 10px;
+      margin: 3px 0;
+      line-height: 1.5;
+    }
+    .cmd-item span { color: #9ca3af; }
+    .cmd-desc { color: #4b5563; margin-left: 4px; }
+
+    #copy-readme {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 4px 0;
+      background: #1f2937;
+      color: #6b7280;
+      border: 1px solid #374151;
+      border-radius: 3px;
+      cursor: pointer;
+      text-align: center;
+    }
+    #copy-readme:hover { color: #d1d5db; border-color: #6b7280; }
+    #copy-readme.copied { color: #86efac; border-color: #86efac; }
+
+    #no-results {
+      padding: 16px 12px;
+      color: #4b5563;
+      font-size: 11px;
+      text-align: center;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <div id="title">[ ] Bracket</div>
+    <div id="kill-all-wrap">
+      <button id="kill-all-btn"  class="hdr-btn">Kill All</button>
+      <button id="kill-confirm"  class="hdr-btn">Confirm</button>
+      <button id="kill-deny"     class="hdr-btn">Deny</button>
+    </div>
+  </div>
+
+  <div id="ambient-panel">
+    <div class="toggle-row">
+      <span class="toggle-label">⏱ Timestamps</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-timestamp" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">🎵 Music context</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-youtube" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">💾 Consolidation prompts</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-consolidation" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="threshold-row" id="threshold-row">
+      <span class="threshold-label">↳ prompt after</span>
+      <input type="number" id="threshold-input" min="5" max="100" value="20">
+      <span class="threshold-label" style="flex:0;color:#4b5563"> msgs</span>
+    </div>
+  </div>
+
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="search tools…" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div id="list-view" class="active">
+    <div id="no-results">No tools match.</div>
+  </div>
+
+  <div id="detail-view">
+    <div id="detail-header">
+      <span id="back-btn">← back</span>
+      <span id="detail-title"></span>
+      <span id="detail-online"></span>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
