@@ -40,7 +40,7 @@ Bracket/
 ```bash
 node server.js
 ```
-Leave this running. It manages tool servers on demand.
+Leave this running. It tracks which tool servers are online and routes `SERVER_START`/`SERVER_STOP`/`SERVER_LIST` commands to manage them.
 
 ### 3. Start the tools you need
 Either start them manually:
@@ -50,14 +50,14 @@ node servers/chess/server.js
 node servers/browse/server.js
 ```
 
-Or use lifecycle commands inside any AI chat:
-
+Or have the AI emit lifecycle commands during a chat session — Bracket will render an approval card for each:
 ```
 [(SERVER_START {"name":"memory"})]
 [(SERVER_START {"name":"chess"})]
 [(SERVER_START {"name":"browse"})]
 [(SERVER_LIST)]
 ```
+You can't type these yourself — Bracket only intercepts commands the model outputs, then asks you to approve them.
 
 ---
 
@@ -88,14 +88,10 @@ Override with the `MEMORY_ROOT` environment variable.
 | `[(DEPTH {…})]` | `level` (1–30) | Set search depth |
 | `[(RESETBOARD)]` | — | Reset to starting position |
 
-Chess requires a `chess-local` directory with `chess.js` and `stockfish` installed.
-Set the `CHESS_LOCAL` environment variable to point to it:
+Chess requires `chess.js` and `stockfish` as local dependencies:
 ```bash
-# Windows
-set CHESS_LOCAL=D:\chess-local\chess-local
-
-# macOS / Linux
-export CHESS_LOCAL=/opt/chess-local
+cd servers/chess
+npm install chess.js stockfish
 ```
 
 ### Browse (port 2410)
@@ -124,7 +120,7 @@ Works with Node 18+ built-in fetch. For JS-rendered pages, install puppeteer and
 4. Add the tool to `TOOLS` in `server.js` (lifecycle)
 5. Add a status row to `popup.html` / `popup.js`
 
-That's it — the extension will automatically route commands to the new server.
+That's it — once these steps are done, the extension will route commands to the new server.
 
 ---
 
