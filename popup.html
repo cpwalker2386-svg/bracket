@@ -232,6 +232,75 @@
       text-align: center;
       display: none;
     }
+
+    /* ── Keys view ── */
+    #keys-view { display: none; }
+    #keys-view.active { display: block; }
+    #keys-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #1f2937;
+      cursor: pointer;
+    }
+    #keys-header:hover { background: #1a2332; }
+    #keys-back-btn { color: #6b7280; font-size: 11px; flex-shrink: 0; }
+    #keys-title { color: #e5e7eb; font-size: 12px; flex: 1; }
+    #keys-body { padding: 10px 12px; }
+    .keys-section-label {
+      color: #4b5563;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 10px 0 6px;
+    }
+    .keys-section-label:first-child { margin-top: 0; }
+    .key-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .key-row-label {
+      color: #9ca3af;
+      font-size: 10px;
+      width: 62px;
+      flex-shrink: 0;
+    }
+    .key-status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #4b5563;
+      flex-shrink: 0;
+    }
+    .key-status-dot.set { background: #86efac; }
+    .key-input {
+      flex: 1;
+      min-width: 0;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 3px;
+      color: #d1d5db;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 3px 6px;
+      outline: none;
+    }
+    .key-input:focus { border-color: #6b7280; }
+    .key-save-btn {
+      font-family: monospace;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid #164e63;
+      background: #0c1a2e;
+      color: #67e8f9;
+      flex-shrink: 0;
+    }
+    .key-save-btn.saved { border-color: #86efac; color: #86efac; }
+    .key-preview { color: #4b5563; font-size: 9px; margin-left: 68px; margin-top: -4px; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -239,6 +308,7 @@
   <div id="header">
     <div id="title">[ ] Bracket</div>
     <div id="kill-all-wrap">
+      <button id="keys-btn"      class="hdr-btn" style="background:#0c1a2e;color:#67e8f9;border-color:#164e63;">🔑 Keys</button>
       <button id="kill-all-btn"  class="hdr-btn">Kill All</button>
       <button id="kill-confirm"  class="hdr-btn">Confirm</button>
       <button id="kill-deny"     class="hdr-btn">Deny</button>
@@ -289,6 +359,33 @@
       <span id="detail-online"></span>
     </div>
     <div id="detail-body"></div>
+  </div>
+
+  <div id="keys-view">
+    <div id="keys-header">
+      <span id="keys-back-btn">← back</span>
+      <span id="keys-title">🔑 API Keys</span>
+    </div>
+    <div id="keys-body">
+      <div id="keys-server-section">
+        <div class="keys-section-label">Server keys (.env — requires lifecycle running)</div>
+        <div id="keys-server-rows"></div>
+      </div>
+      <div id="keys-steam-section">
+        <div class="keys-section-label">Steam (stored on this device only)</div>
+        <div class="key-row">
+          <span class="key-row-label">API key</span>
+          <input type="password" id="steam-key-input" class="key-input" placeholder="paste key…" autocomplete="off" spellcheck="false">
+          <button class="key-save-btn" id="steam-key-save">Save</button>
+        </div>
+        <div class="key-preview" id="steam-key-preview"></div>
+        <div class="key-row">
+          <span class="key-row-label">Steam ID</span>
+          <input type="text" id="steam-id-input" class="key-input" placeholder="7656119…" autocomplete="off" spellcheck="false">
+          <button class="key-save-btn" id="steam-id-save">Save</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

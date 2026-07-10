@@ -1,0 +1,39 @@
+{
+  "name": "oracle",
+  "port": 2412,
+  "routes": {
+    "ORACLE_PING": "/ping",
+    "ASK": "/ask",
+    "SANITY": "/sanity",
+    "SEE": "/see",
+    "THINK": "/think"
+  },
+  "requires_key": "GEMINI_API_KEY",
+  "ui": {
+    "label": "ORACLE",
+    "icon": "🔮",
+    "colors": { "border": "#f43f5e", "bg": "#1c0a10", "text": "#fda4af", "header": "#f43f5e", "btnBg": "#881337", "btnBorder": "#f43f5e", "btnText": "#fda4af", "resultColor": "#fda4af" },
+    "asyncCommands": ["ASK", "SANITY", "SEE", "THINK", "ORACLE_PING"],
+    "asyncLoadingText": "[Gemini: thinking…]",
+    "asyncReadyText": "[Gemini: ready — press Enter to inject result]"
+  },
+  "popup": {
+    "groups": [
+      {
+        "label": "Ask",
+        "cmds": [
+          { "cmd": "[(ASK {\"message\":\"…\",\"context\":\"…\"})]", "desc": "general-purpose message" },
+          { "cmd": "[(THINK {\"message\":\"…\",\"depth\":\"normal\"})]", "desc": "step-by-step reasoning" }
+        ]
+      },
+      {
+        "label": "Check",
+        "cmds": [
+          { "cmd": "[(SANITY {\"message\":\"…\",\"severity\":\"balanced\"})]", "desc": "critique a claim/plan" },
+          { "cmd": "[(SEE {\"url\":\"https://…\",\"prompt\":\"…\"})]", "desc": "describe an image" },
+          { "cmd": "[(ORACLE_PING)]", "desc": "check server + key status" }
+        ]
+      }
+    ]
+  }
+}

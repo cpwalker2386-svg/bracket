@@ -1,0 +1,28 @@
+{
+  "name": "browse",
+  "port": 2410,
+  "routes": {
+    "BROWSE": "/browse",
+    "OPENURL": "/openurl"
+  },
+  "requires_key": null,
+  "ui": {
+    "label": "BROWSE",
+    "icon": "🌐",
+    "colors": { "border": "#22d3ee", "bg": "#0c1a2e", "text": "#67e8f9", "header": "#22d3ee", "btnBg": "#164e63", "btnBorder": "#22d3ee", "btnText": "#67e8f9", "resultColor": "#67e8f9" },
+    "asyncCommands": [],
+    "asyncLoadingText": null,
+    "asyncReadyText": null
+  },
+  "popup": {
+    "groups": [
+      {
+        "label": "Fetch",
+        "cmds": [
+          { "cmd": "[(BROWSE {\"url\":\"https://…\"})]", "desc": "fetch a URL, return readable text" },
+          { "cmd": "[(OPENURL {\"url\":\"https://…\"})]", "desc": "fetch + return raw page text" }
+        ]
+      }
+    ]
+  }
+}

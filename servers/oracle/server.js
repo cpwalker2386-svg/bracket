@@ -58,7 +58,7 @@ function callGemini(model, parts, config = {}) {
         headers: {
           'Content-Type':   'application/json',
           'Content-Length': bodyBuf.length,
-          'x-goog-api-key': GEMINI_API_KEY,
+          'x-goog-api-key': apiKey,
         },
       },
       (res) => {
@@ -349,6 +349,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   log(`Oracle server started on port ${PORT}`);
-  log(`Using Gemini API key: ${GEMINI_API_KEY.slice(0, 8)}…`);
+  log(`Using Gemini API key: ${apiKey.slice(0, 8)}…`);
   log(`Models: ${GEMINI_MODELS.join(', ')}`);
 });

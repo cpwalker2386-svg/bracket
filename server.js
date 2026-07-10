@@ -6,22 +6,70 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = 2407;
-const SERVERS_DIR = path.join(__dirname, 'servers');
+const ROOT_DIR = __dirname;
+const SERVERS_DIR = path.join(ROOT_DIR, 'servers');
+const ENV_PATH = path.join(ROOT_DIR, '.env');
 
-// ─── Tool Registry ────────────────────────────────────────────────────────────
-// Each tool: { port, dir, process? }
-// Add new tools here when they're created.
+// ─── Manifest Loading ─────────────────────────────────────────────────────────
+// Each servers/<name>/manifest.json declares its own port, routes, and UI info.
+// This is the only place that needs to know a new tool exists — dropping a
+// folder with a manifest.json in it is enough. No other file needs editing.
 
-const TOOLS = {
-  memory:   { port: 2408, dir: path.join(SERVERS_DIR, 'memory'),   process: null },
-  chess:    { port: 2409, dir: path.join(SERVERS_DIR, 'chess'),     process: null },
-  browse:   { port: 2410, dir: path.join(SERVERS_DIR, 'browse'),    process: null },
-  moltbook: { port: 2411, dir: path.join(SERVERS_DIR, 'moltbook'),  process: null },
-  oracle:   { port: 2412, dir: path.join(SERVERS_DIR, 'oracle'),    process: null },
-};
+let TOOLS = {}; // name -> { port, dir, process, manifest }
+
+function loadManifests() {
+  TOOLS = {};
+  if (!fs.existsSync(SERVERS_DIR)) return;
+
+  for (const name of fs.readdirSync(SERVERS_DIR)) {
+    const dir = path.join(SERVERS_DIR, name);
+    const manifestPath = path.join(dir, 'manifest.json');
+    if (!fs.statSync(dir).isDirectory()) continue;
+    if (!fs.existsSync(manifestPath)) {
+      log(`WARNING: servers/${name} has no manifest.json — skipping`);
+      continue;
+    }
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      TOOLS[name] = { port: manifest.port, dir, process: null, manifest };
+    } catch (err) {
+      log(`WARNING: servers/${name}/manifest.json is invalid — ${err.message}`);
+    }
+  }
+}
 
 function log(msg) {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
+}
+
+// ─── .env Helpers ─────────────────────────────────────────────────────────────
+
+function readEnvFile() {
+  if (!fs.existsSync(ENV_PATH)) return {};
+  const lines = fs.readFileSync(ENV_PATH, 'utf8').split('\n');
+  const out = {};
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) continue;
+    out[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim();
+  }
+  return out;
+}
+
+function writeEnvFile(vars) {
+  const lines = Object.entries(vars).map(([k, v]) => `${k}=${v}`);
+  fs.writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf8');
+}
+
+function setEnvKey(key, value) {
+  if (!/^[A-Z][A-Z0-9_]*$/.test(key)) {
+    throw new Error('Invalid key name — use uppercase letters, numbers, underscores only');
+  }
+  const vars = readEnvFile();
+  vars[key] = value;
+  writeEnvFile(vars);
 }
 
 // ─── Lifecycle Handlers ───────────────────────────────────────────────────────
@@ -40,7 +88,7 @@ function handleStart(params) {
 
   const serverPath = path.join(tool.dir, 'server.js');
   if (!fs.existsSync(serverPath)) {
-    return `ERROR: ${serverPath} not found. Create the server first.`;
+    return `ERROR: ${serverPath} not found.`;
   }
 
   try {
@@ -97,7 +145,7 @@ function handleList() {
 }
 
 function handleSystem() {
-  return [
+  const lines = [
     'Bracket — tool system for AI models.',
     '',
     'You are connected to a local tool server. Commands use bracket syntax:',
@@ -108,17 +156,17 @@ function handleSystem() {
     '',
     'Start here:',
     '  [(SERVER_LIST)]              — see available tools and their status',
-    '  [(README {"name":"memory"})]   — read memory tool instructions',
-    '  [(README {"name":"chess"})]    — read chess tool instructions',
-    '  [(README {"name":"browse"})]   — read browse tool instructions',
-    '  [(README {"name":"moltbook"})] — read moltbook tool instructions',
-    '',
-    'Control:',
-    '  [(SERVER_START {"name":"memory"})] — start a tool server',
-    '  [(SERVER_STOP {"name":"chess"})]   — stop a tool server',
-    '',
-    'Rules apply per tool — read the README before using a tool for the first time.',
-  ].join('\n');
+  ];
+  for (const name of Object.keys(TOOLS)) {
+    lines.push(`  [(README {"name":"${name}"})]   — read ${name} tool instructions`);
+  }
+  lines.push('');
+  lines.push('Control:');
+  lines.push('  [(SERVER_START {"name":"..."})] — start a tool server');
+  lines.push('  [(SERVER_STOP {"name":"..."})]  — stop a tool server');
+  lines.push('');
+  lines.push('Rules apply per tool — read the README before using a tool for the first time.');
+  return lines.join('\n');
 }
 
 function handleReadme(params) {
@@ -156,11 +204,54 @@ function handleStopAll() {
   return results.join('\n');
 }
 
+function handleManifests() {
+  const out = {};
+  for (const [name, tool] of Object.entries(TOOLS)) {
+    out[name] = {
+      port: tool.port,
+      routes: tool.manifest.routes,
+      requires_key: tool.manifest.requires_key || null,
+      ui: tool.manifest.ui,
+      popup: tool.manifest.popup || { groups: [] },
+    };
+  }
+  return JSON.stringify(out);
+}
+
+function handleGetKeys() {
+  const envVars = readEnvFile();
+  const required = new Set();
+  for (const tool of Object.values(TOOLS)) {
+    if (tool.manifest.requires_key) required.add(tool.manifest.requires_key);
+  }
+  const out = {};
+  for (const key of required) {
+    const val = envVars[key];
+    out[key] = val ? { set: true, preview: val.slice(0, 6) + '…' } : { set: false, preview: null };
+  }
+  return JSON.stringify(out);
+}
+
+function handleSetKey(params) {
+  const key = (params.key || '').trim();
+  const value = (params.value || '').trim();
+  if (!key || !value) {
+    return JSON.stringify({ ok: false, error: 'key and value are both required' });
+  }
+  try {
+    setEnvKey(key, value);
+    log(`Set env key: ${key}`);
+    return JSON.stringify({ ok: true });
+  } catch (err) {
+    return JSON.stringify({ ok: false, error: err.message });
+  }
+}
+
 // ─── HTTP Server ──────────────────────────────────────────────────────────────
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -186,16 +277,20 @@ const server = http.createServer(async (req, res) => {
 
   const params = await readBody(req);
   let result = '';
+  let contentType = 'text/plain; charset=utf-8';
 
   try {
     switch (req.url) {
-      case '/ping':    result = 'pong';                break;
-      case '/system':  result = handleSystem();        break;
-      case '/readme':  result = handleReadme(params);  break;
-      case '/start':   result = handleStart(params);   break;
-      case '/stop':    result = handleStop(params);    break;
-      case '/stopall': result = handleStopAll();       break;
-      case '/list':    result = handleList();          break;
+      case '/ping':      result = 'pong';                break;
+      case '/system':    result = handleSystem();        break;
+      case '/readme':    result = handleReadme(params);  break;
+      case '/start':      result = handleStart(params);   break;
+      case '/stop':       result = handleStop(params);    break;
+      case '/stopall':    result = handleStopAll();       break;
+      case '/list':        result = handleList();          break;
+      case '/manifests':  result = handleManifests();     contentType = 'application/json'; break;
+      case '/keys':        result = handleGetKeys();       contentType = 'application/json'; break;
+      case '/set-key':    result = handleSetKey(params);  contentType = 'application/json'; break;
       default:
         res.writeHead(404);
         res.end('Unknown route: ' + req.url);
@@ -208,12 +303,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   log(`${req.method} ${req.url} → ${result.slice(0, 80).replace(/\n/g, ' ')}`);
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.writeHead(200, { 'Content-Type': contentType });
   res.end(result);
 });
+
+loadManifests();
 
 server.listen(PORT, '127.0.0.1', () => {
   log(`Bracket lifecycle manager on port ${PORT}`);
   log(`Watching tools in: ${SERVERS_DIR}`);
-  log('Use SERVER_START {"name":"memory"} to activate a tool.');
+  log(`Loaded tools: ${Object.keys(TOOLS).join(', ') || '(none found)'}`);
+  log('Use SERVER_START {"name":"..."} to activate a tool.');
 });

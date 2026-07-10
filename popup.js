@@ -1,8 +1,10 @@
 'use strict';
 
-// ─── Tool Definitions ─────────────────────────────────────────────────────────
+// ─── Tool Definitions (dynamic) ────────────────────────────────────────────────
+// Lifecycle is the only permanent entry — everything else comes from each
+// server's manifest.json, fetched at popup open.
 
-const TOOLS = [
+let TOOLS = [
   {
     id: 'lifecycle',
     label: 'Lifecycle',
@@ -26,94 +28,27 @@ const TOOLS = [
       },
     ],
   },
-  {
-    id: 'memory',
-    label: 'Memory',
-    icon: '⬡',
-    port: 2408,
-    groups: [
-      {
-        label: 'Read',
-        cmds: [
-          { cmd: '[(TAGINDEX)]',                                           desc: 'all tags + counts' },
-          { cmd: '[(SEARCH {"tags":"tag1","limit":10})]',                  desc: 'find memories' },
-          { cmd: '[(LIST {"limit":20})]',                                  desc: 'recent memories' },
-          { cmd: '[(READ {"id":"filename_c91"})]',                         desc: 'read + required' },
-        ],
-      },
-      {
-        label: 'Write',
-        cmds: [
-          { cmd: '[(STORE {"tags":"…","recipe":"…","confidence":0.9,"importance":"high","model":"claude"})]', desc: 'save memory' },
-          { cmd: '[(UPDATE {"id":"…","tags":"…","recipe":"…"})]',          desc: 'update fields' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'chess',
-    label: 'Chess',
-    icon: '♟',
-    port: 2409,
-    groups: [
-      {
-        label: 'Board',
-        cmds: [
-          { cmd: '[(BOARD)]',               desc: 'board + FEN + turn' },
-          { cmd: '[(MOVES)]',               desc: 'all legal moves' },
-          { cmd: '[(LIST)]',                desc: 'move history' },
-          { cmd: '[(RESETBOARD)]',          desc: 'reset to start' },
-        ],
-      },
-      {
-        label: 'Play',
-        cmds: [
-          { cmd: '[(MOVE {"san":"e4"})]',   desc: 'play a move (SAN or UCI)' },
-          { cmd: '[(RECOMMENDATION)]',      desc: 'Stockfish eval (async)' },
-          { cmd: '[(DEPTH {"level":15})]',  desc: 'set search depth (1–30)' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'moltbook',
-    label: 'Moltbook',
-    icon: '🦞',
-    port: 2411,
-    groups: [
-      {
-        label: 'Feed',
-        cmds: [
-          { cmd: '[(MOLT_HOME)]',                                                 desc: 'notifications + following feed' },
-          { cmd: '[(MOLT_FEED {"sort":"hot","limit":10})]',                       desc: 'browse main feed' },
-          { cmd: '[(MOLT_READ {"post_id":"…"})]',                                 desc: 'read post + comments' },
-          { cmd: '[(MOLT_SEARCH {"q":"AI agents"})]',                             desc: 'semantic search' },
-        ],
-      },
-      {
-        label: 'Post',
-        cmds: [
-          { cmd: '[(MOLT_POST {"submolt":"general","title":"…","content":"…"})]', desc: 'create a post' },
-          { cmd: '[(MOLT_COMMENT {"post_id":"…","content":"…"})]',                desc: 'comment on a post' },
-          { cmd: '[(MOLT_UPVOTE {"post_id":"…"})]',                               desc: 'upvote a post' },
-          { cmd: '[(MOLT_DOWNVOTE {"post_id":"…"})]',                             desc: 'downvote a post' },
-        ],
-      },
-      {
-        label: 'Account',
-        cmds: [
-          { cmd: '[(MOLT_AGENTS)]',                                               desc: 'list loaded agent aliases' },
-          { cmd: '[(MOLT_ME {"as":"claude"})]',                                   desc: 'your agent profile' },
-          { cmd: '[(MOLT_REGISTER {"name":"…","description":"…"})]',              desc: 'register a new agent' },
-          { cmd: '[(MOLT_SUBMOLTS)]',                                             desc: 'list all submolts' },
-          { cmd: '[(MOLT_FOLLOW {"molty":"…"})]',                                 desc: 'follow an agent' },
-          { cmd: '[(MOLT_KEYS_SET {"alias":"claude","key":"moltbook_sk_…"})]',     desc: 'save an agent key' },
-          { cmd: '[(MOLT_KEYS_DELETE {"alias":"…"})]',                             desc: 'remove an agent key' },
-        ],
-      },
-    ],
-  },
 ];
+
+let manifestData = {}; // raw manifests, kept for the Keys panel
+
+async function loadTools() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: 'GET_MANIFESTS' }, (response) => {
+      const manifests = response?.manifests || {};
+      manifestData = manifests;
+      const dynamic = Object.entries(manifests).map(([id, tool]) => ({
+        id,
+        label: tool.ui.label.charAt(0) + tool.ui.label.slice(1).toLowerCase(),
+        icon: tool.ui.icon,
+        port: tool.port,
+        groups: (tool.popup && tool.popup.groups) || [],
+      }));
+      TOOLS = [TOOLS[0], ...dynamic]; // keep lifecycle first
+      resolve();
+    });
+  });
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -381,8 +316,11 @@ function esc(str) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
-buildList();
-checkAll();
+loadTools().then(() => {
+  buildList();
+  checkAll();
+});
+initKeysPanel();
 
 // ─── Ambient Toggles ──────────────────────────────────────────────────────────
 
@@ -426,3 +364,148 @@ checkAll();
     chrome.storage.sync.set({ consolidationThreshold: val });
   });
 })();
+
+// ─── API Keys Panel ────────────────────────────────────────────────────────────
+
+function initKeysPanel() {
+  const keysBtn      = document.getElementById('keys-btn');
+  const keysView     = document.getElementById('keys-view');
+  const keysBackBtn  = document.getElementById('keys-back-btn');
+  const keysHeader   = document.getElementById('keys-header');
+  const serverRows   = document.getElementById('keys-server-rows');
+
+  function openKeys() {
+    listView.classList.remove('active');
+    detailView.classList.remove('active');
+    keysView.classList.add('active');
+    renderServerKeyRows();
+  }
+  function closeKeys() {
+    keysView.classList.remove('active');
+    listView.classList.add('active');
+  }
+
+  keysBtn.addEventListener('click', openKeys);
+  keysBackBtn.addEventListener('click', closeKeys);
+  keysHeader.addEventListener('click', closeKeys);
+
+  async function renderServerKeyRows() {
+    serverRows.innerHTML = '<div style="color:#4b5563;font-size:10px;">Checking…</div>';
+
+    // Which env keys does at least one loaded tool require?
+    const required = new Set();
+    for (const tool of Object.values(manifestData)) {
+      if (tool.requires_key) required.add(tool.requires_key);
+    }
+
+    if (required.size === 0) {
+      serverRows.innerHTML = '<div style="color:#4b5563;font-size:10px;">No loaded tool requires a server key.</div>';
+      return;
+    }
+
+    let status = {};
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'GET_KEY_STATUS' }, (response) => {
+        status = response?.status || {};
+        resolve();
+      });
+    });
+
+    serverRows.innerHTML = '';
+    for (const key of required) {
+      const info = status[key] || { set: false, preview: null };
+
+      const row = document.createElement('div');
+      row.className = 'key-row';
+
+      const dot = document.createElement('span');
+      dot.className = 'key-status-dot' + (info.set ? ' set' : '');
+
+      const label = document.createElement('span');
+      label.className = 'key-row-label';
+      label.textContent = key;
+      label.title = key;
+
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.className = 'key-input';
+      input.placeholder = info.set ? 'set — enter to replace' : 'paste key…';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'key-save-btn';
+      saveBtn.textContent = 'Save';
+      saveBtn.addEventListener('click', () => {
+        const value = input.value.trim();
+        if (!value) return;
+        saveBtn.textContent = '…';
+        chrome.runtime.sendMessage({ type: 'SET_KEY', key, value }, (response) => {
+          if (response?.ok) {
+            saveBtn.textContent = 'Saved ✓';
+            saveBtn.classList.add('saved');
+            dot.classList.add('set');
+            input.value = '';
+            input.placeholder = 'set — enter to replace';
+            setTimeout(() => { saveBtn.textContent = 'Save'; saveBtn.classList.remove('saved'); }, 1500);
+          } else {
+            saveBtn.textContent = 'Failed';
+            setTimeout(() => { saveBtn.textContent = 'Save'; }, 1500);
+          }
+        });
+      });
+
+      row.appendChild(dot);
+      row.appendChild(label);
+      row.appendChild(input);
+      row.appendChild(saveBtn);
+      serverRows.appendChild(row);
+
+      if (info.set) {
+        const preview = document.createElement('div');
+        preview.className = 'key-preview';
+        preview.textContent = `current: ${info.preview}`;
+        serverRows.appendChild(preview);
+      }
+    }
+  }
+
+  // ─── Steam creds — stored locally, no lifecycle round-trip needed ──────────
+
+  const steamKeyInput   = document.getElementById('steam-key-input');
+  const steamKeySave    = document.getElementById('steam-key-save');
+  const steamKeyPreview = document.getElementById('steam-key-preview');
+  const steamIdInput    = document.getElementById('steam-id-input');
+  const steamIdSave     = document.getElementById('steam-id-save');
+
+  chrome.storage.local.get(['steamApiKey', 'steamId'], (data) => {
+    if (data.steamApiKey) {
+      steamKeyInput.placeholder = 'set — enter to replace';
+      steamKeyPreview.textContent = `current: ${data.steamApiKey.slice(0, 6)}…`;
+    }
+    if (data.steamId) steamIdInput.value = data.steamId;
+  });
+
+  steamKeySave.addEventListener('click', () => {
+    const value = steamKeyInput.value.trim();
+    if (!value) return;
+    chrome.storage.local.set({ steamApiKey: value }, () => {
+      steamKeySave.textContent = 'Saved ✓';
+      steamKeySave.classList.add('saved');
+      steamKeyPreview.textContent = `current: ${value.slice(0, 6)}…`;
+      steamKeyInput.value = '';
+      steamKeyInput.placeholder = 'set — enter to replace';
+      setTimeout(() => { steamKeySave.textContent = 'Save'; steamKeySave.classList.remove('saved'); }, 1500);
+    });
+  });
+
+  steamIdSave.addEventListener('click', () => {
+    const value = steamIdInput.value.trim();
+    if (!value) return;
+    chrome.storage.local.set({ steamId: value }, () => {
+      steamIdSave.textContent = 'Saved ✓';
+      steamIdSave.classList.add('saved');
+      setTimeout(() => { steamIdSave.textContent = 'Save'; steamIdSave.classList.remove('saved'); }, 1500);
+    });
+  });
+}

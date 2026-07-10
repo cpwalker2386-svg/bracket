@@ -17,7 +17,8 @@ Bracket/
 └── servers/
     ├── memory/server.js   Memory tool (port 2408)
     ├── chess/server.js    Chess + Stockfish tool (port 2409)
-    └── browse/server.js   Browse/fetch tool (port 2410)
+    ├── browse/server.js   Browse/fetch tool (port 2410)
+    └── oracle/server.js   Gemini AI tool — vision, reasoning, sanity-checks (port 2412)
 ```
 
 **Flow:**
@@ -36,18 +37,26 @@ Bracket/
 2. Enable **Developer mode**
 3. Click **Load unpacked** → select the `Bracket` folder
 
-### 2. Start the lifecycle manager
+### 2. Set up API keys (if using Oracle)
+Create a `.env` file at the repo root:
+```
+GEMINI_API_KEY=your_key_here
+```
+Get a free key at https://aistudio.google.com/apikey
+
+### 3. Start the lifecycle manager
 ```bash
 node server.js
 ```
 Leave this running. It tracks which tool servers are online and routes `SERVER_START`/`SERVER_STOP`/`SERVER_LIST` commands to manage them.
 
-### 3. Start the tools you need
+### 4. Start the tools you need
 Either start them manually:
 ```bash
 node servers/memory/server.js
 node servers/chess/server.js
 node servers/browse/server.js
+node servers/oracle/server.js
 ```
 
 Or have the AI emit lifecycle commands during a chat session — Bracket will render an approval card for each:
@@ -55,9 +64,11 @@ Or have the AI emit lifecycle commands during a chat session — Bracket will re
 [(SERVER_START {"name":"memory"})]
 [(SERVER_START {"name":"chess"})]
 [(SERVER_START {"name":"browse"})]
+[(SERVER_START {"name":"oracle"})]
 [(SERVER_LIST)]
 ```
 You can't type these yourself — Bracket only intercepts commands the model outputs, then asks you to approve them.
+
 
 ---
 
@@ -101,6 +112,20 @@ npm install chess.js stockfish
 | `[(BROWSE {…})]` | `url` | Fetch a URL and return plain text |
 
 Works with Node 18+ built-in fetch. For JS-rendered pages, install puppeteer and update `servers/browse/server.js`.
+
+
+### Oracle (port 2412)
+
+| Command | Params | Description |
+|---------|--------|-------------|
+| `[(ASK {…})]` | `message, context?, temperature?` | General-purpose message to Gemini |
+| `[(SANITY {…})]` | `message, severity?` | Critique a claim/plan/reasoning (PASS/CONCERN/FAIL) |
+| `[(SEE {…})]` | `url, prompt?` | Describe or analyze an image via Gemini vision |
+| `[(THINK {…})]` | `message, depth?` | Step-by-step reasoning on a problem |
+| `[(ORACLE_PING)]` | — | Check server + Gemini API key status |
+
+Requires a Gemini API key. Add `GEMINI_API_KEY` to a `.env` file at the repo root.
+Get a free key at https://aistudio.google.com/apikey
 
 ### Lifecycle (port 2407)
 

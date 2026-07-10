@@ -1,0 +1,44 @@
+{
+  "name": "chess",
+  "port": 2409,
+  "routes": {
+    "BOARD": "/board",
+    "MOVES": "/moves",
+    "MOVE": "/move",
+    "MOVE_HISTORY": "/list",
+    "RECOMMENDATION": "/recommendation",
+    "DEPTH": "/depth",
+    "UNDO": "/undo",
+    "RESETBOARD": "/reset"
+  },
+  "requires_key": null,
+  "ui": {
+    "label": "CHESS",
+    "icon": "♟",
+    "colors": { "border": "#3b82f6", "bg": "#1e3a5f", "text": "#93c5fd", "header": "#3b82f6", "btnBg": "#1e40af", "btnBorder": "#3b82f6", "btnText": "#93c5fd", "resultColor": "#86efac" },
+    "asyncCommands": ["RECOMMENDATION"],
+    "asyncLoadingText": "[Stockfish: searching…]",
+    "asyncReadyText": "[Stockfish: ready — press Enter to inject result]"
+  },
+  "popup": {
+    "groups": [
+      {
+        "label": "Board",
+        "cmds": [
+          { "cmd": "[(BOARD)]", "desc": "board + FEN + turn" },
+          { "cmd": "[(MOVES)]", "desc": "all legal moves" },
+          { "cmd": "[(LIST)]", "desc": "move history" },
+          { "cmd": "[(RESETBOARD)]", "desc": "reset to start" }
+        ]
+      },
+      {
+        "label": "Play",
+        "cmds": [
+          { "cmd": "[(MOVE {\"san\":\"e4\"})]", "desc": "play a move (SAN or UCI)" },
+          { "cmd": "[(RECOMMENDATION)]", "desc": "Stockfish eval (async)" },
+          { "cmd": "[(DEPTH {\"level\":15})]", "desc": "set search depth (1–30)" }
+        ]
+      }
+    ]
+  }
+}

@@ -282,80 +282,62 @@
 
   }, true);
 
-  // ─── Tool Registry ────────────────────────────────────────────────────────────
+  // ─── Tool Registry (dynamic) ──────────────────────────────────────────────────
+  // Loaded from each server's manifest.json via the lifecycle server, relayed
+  // through background.js. No tool is hardcoded here — dropping a new
+  // servers/<name>/manifest.json is enough for it to show up automatically.
 
-  const TOOLS = {
-    memory: {
-      commands: new Set(['STORE','SEARCH','LIST','READ','UPDATE','TAGINDEX','TAG_INDEX','RECONSTRUCT']),
-      label: 'MEMORY', icon: '⬡',
-      colors: { border:'#facc15', bg:'#1f2937', text:'#86efac', header:'#facc15', btnBg:'#166534', btnBorder:'#86efac', btnText:'#86efac', resultColor:'#86efac' },
-      asyncCommands: new Set(['RECONSTRUCT']),
-      asyncLoadingText: '[Gemini: reconstructing…]',
-      asyncReadyText:   '[Gemini: ready — press Enter to inject result]',
-      preExecute: async (action, params) => {
-        if (action !== 'STORE') return null;
-        try {
-          const r = await fetch('http://localhost:2408/exists', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
-          const exists = await r.text();
-          if (exists.trim() === 'true') return 'SKIPPED: Memory already exists on disk.';
-        } catch (_) {}
-        return null;
-      },
-    },
-    chess: {
-      commands: new Set(['BOARD','MOVES','MOVE','MOVE_HISTORY','RECOMMENDATION','DEPTH','UNDO','RESETBOARD']),
-      label: 'CHESS', icon: '♟',
-      colors: { border:'#3b82f6', bg:'#1e3a5f', text:'#93c5fd', header:'#3b82f6', btnBg:'#1e40af', btnBorder:'#3b82f6', btnText:'#93c5fd', resultColor:'#86efac' },
-      asyncCommands: new Set(['RECOMMENDATION']),
-      asyncLoadingText: '[Stockfish: searching…]',
-      asyncReadyText:   '[Stockfish: ready — press Enter to inject result]',
-      preExecute: null,
-    },
-    browse: {
-      commands: new Set(['BROWSE','OPENURL']),
-      label: 'BROWSE', icon: '🌐',
-      colors: { border:'#22d3ee', bg:'#0c1a2e', text:'#67e8f9', header:'#22d3ee', btnBg:'#164e63', btnBorder:'#22d3ee', btnText:'#67e8f9', resultColor:'#67e8f9' },
-      asyncCommands: new Set(),
-      preExecute: null,
-    },
-    lifecycle: {
-      commands: new Set(['SYSTEM','README','SERVER_START','SERVER_STOP','SERVER_LIST']),
-      label: 'SERVER', icon: '⚙',
-      colors: { border:'#f97316', bg:'#1c1410', text:'#fdba74', header:'#f97316', btnBg:'#7c2d12', btnBorder:'#f97316', btnText:'#fdba74', resultColor:'#fdba74' },
-      asyncCommands: new Set(),
-      preExecute: null,
-    },
-    moltbook: {
-      commands: new Set([
-        'MOLT_REGISTER','MOLT_HOME','MOLT_STATUS','MOLT_ME','MOLT_FEED','MOLT_POST','MOLT_COMMENT','MOLT_READ',
-        'MOLT_UPVOTE','MOLT_DOWNVOTE','MOLT_SEARCH','MOLT_SUBMOLTS','MOLT_SUBSCRIBE','MOLT_FOLLOW','MOLT_PROFILE',
-        'MOLT_VERIFY','MOLT_DELETE','MOLT_AGENTS','MOLT_KEYS_SET','MOLT_KEYS_DELETE','MOLT_NOTIFICATIONS_READ'
-      ]),
-      label: 'MOLTBOOK', icon: '🦞',
-      colors: { border:'#a855f7', bg:'#1a0a2e', text:'#d8b4fe', header:'#a855f7', btnBg:'#581c87', btnBorder:'#a855f7', btnText:'#d8b4fe', resultColor:'#c4b5fd' },
-      asyncCommands: new Set(['MOLT_POST','MOLT_COMMENT']),
-      asyncLoadingText: '[Moltbook: posting…]',
-      asyncReadyText:   '[Moltbook: done — press Enter to inject result]',
-      preExecute: null,
-    },
-    oracle: {
-      commands: new Set(['ORACLE_PING','ASK','SANITY','SEE','THINK']),
-      label: 'ORACLE', icon: '🔮',
-      colors: { border:'#f43f5e', bg:'#1c0a10', text:'#fda4af', header:'#f43f5e', btnBg:'#881337', btnBorder:'#f43f5e', btnText:'#fda4af', resultColor:'#fda4af' },
-      asyncCommands: new Set(['ASK','SANITY','SEE','THINK','ORACLE_PING']),
-      asyncLoadingText: '[Gemini: thinking…]',
-      asyncReadyText:   '[Gemini: ready — press Enter to inject result]',
-      preExecute: null,
+  let TOOLS = {};
+  let ACTION_TO_TOOL = {};
+  let ALL_COMMANDS = new Set();
+  let toolsReady = false;
+
+  // A small number of tools need page-context logic beyond what a JSON
+  // manifest can express (e.g. a pre-flight fetch check). Keep those here,
+  // keyed by tool name, and manifest.json stays pure data for everything else.
+  const PRE_EXECUTE_HOOKS = {
+    memory: async (action, params) => {
+      if (action !== 'STORE') return null;
+      try {
+        const r = await fetch('http://localhost:2408/exists', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params) });
+        const exists = await r.text();
+        if (exists.trim() === 'true') return 'SKIPPED: Memory already exists on disk.';
+      } catch (_) {}
+      return null;
     },
   };
 
-  const ACTION_TO_TOOL = {};
-  for (const [, tool] of Object.entries(TOOLS)) {
-    for (const cmd of tool.commands) {
-      ACTION_TO_TOOL[cmd] = tool;
-    }
+  function loadTools() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'GET_MANIFESTS' }, (response) => {
+        if (chrome.runtime.lastError || !response || !response.manifests) {
+          console.warn('[Bracket] Failed to load tool manifests — is the lifecycle manager running?');
+          resolve(false);
+          return;
+        }
+        TOOLS = {};
+        for (const [name, tool] of Object.entries(response.manifests)) {
+          TOOLS[name] = {
+            commands: new Set(Object.keys(tool.routes)),
+            label: tool.ui.label,
+            icon: tool.ui.icon,
+            colors: tool.ui.colors,
+            asyncCommands: new Set(tool.ui.asyncCommands || []),
+            asyncLoadingText: tool.ui.asyncLoadingText,
+            asyncReadyText: tool.ui.asyncReadyText,
+            preExecute: PRE_EXECUTE_HOOKS[name] || null,
+          };
+        }
+        ACTION_TO_TOOL = {};
+        for (const [, tool] of Object.entries(TOOLS)) {
+          for (const cmd of tool.commands) ACTION_TO_TOOL[cmd] = tool;
+        }
+        ALL_COMMANDS = new Set(Object.keys(ACTION_TO_TOOL));
+        toolsReady = true;
+        resolve(true);
+      });
+    });
   }
-  const ALL_COMMANDS = new Set(Object.keys(ACTION_TO_TOOL));
 
   let pendingResults = [];
   const processingNow = new WeakSet();
@@ -561,8 +543,11 @@
     if (node.querySelectorAll && msgSelectorStr) node.querySelectorAll(msgSelectorStr).forEach(el => tryStampMessage(el));
   }
 
-  new MutationObserver((mutations) => {
-    for (const mutation of mutations) for (const node of mutation.addedNodes) stampAndProcess(node);
-  }).observe(document.body, { childList: true, subtree: true });
+  loadTools().then((ok) => {
+    if (!ok) console.warn('[Bracket] Starting without tool commands — start the lifecycle manager and reload the page.');
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) for (const node of mutation.addedNodes) stampAndProcess(node);
+    }).observe(document.body, { childList: true, subtree: true });
+  });
 
 })();

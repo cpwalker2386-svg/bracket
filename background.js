@@ -1,69 +1,49 @@
 'use strict';
 
-// ─── Tool Registry ────────────────────────────────────────────────────────────
+// ─── Tool Registry (dynamic) ───────────────────────────────────────────────────
+// Lifecycle server (port 2407) is the source of truth for what tools exist.
+// This only hardcodes lifecycle's own routes — everything else is fetched.
 
-const TOOL_ROUTES = {
-  // ── Memory (port 2408) ──
-  STORE:     { port: 2408, endpoint: '/store' },
-  RECONSTRUCT: { port: 2408, endpoint: '/reconstruct' },
-  SEARCH:    { port: 2408, endpoint: '/search' },
-  LIST:      { port: 2408, endpoint: '/list' },
-  READ:      { port: 2408, endpoint: '/read-with-requires' },
-  UPDATE:    { port: 2408, endpoint: '/update' },
-  TAGINDEX:  { port: 2408, endpoint: '/tag-index' },
-  TAG_INDEX: { port: 2408, endpoint: '/tag-index' },
-
-  // ── Browse (port 2410) ──
-  BROWSE:  { port: 2410, endpoint: '/browse' },
-  OPENURL: { port: 2410, endpoint: '/openurl' },
-
-  // ── Chess (port 2409) ──
-  BOARD:          { port: 2409, endpoint: '/board' },
-  MOVES:          { port: 2409, endpoint: '/moves' },
-  MOVE:           { port: 2409, endpoint: '/move' },
-  MOVE_HISTORY: { port: 2409, endpoint: '/list' },
-  RECOMMENDATION: { port: 2409, endpoint: '/recommendation' },
-  DEPTH:          { port: 2409, endpoint: '/depth' },
-  UNDO:           { port: 2409, endpoint: '/undo' },
-  RESETBOARD:     { port: 2409, endpoint: '/reset' },
-
-  // ── Lifecycle (port 2407) ──
+const LIFECYCLE_ROUTES = {
   SYSTEM:       { port: 2407, endpoint: '/system' },
   README:       { port: 2407, endpoint: '/readme' },
   SERVER_START: { port: 2407, endpoint: '/start' },
   SERVER_STOP:  { port: 2407, endpoint: '/stop' },
   SERVER_LIST:  { port: 2407, endpoint: '/list' },
-
-  // ── Moltbook (port 2411) ──
-  MOLT_REGISTER:  { port: 2411, endpoint: '/molt_register' },
-  MOLT_HOME:      { port: 2411, endpoint: '/molt_home' },
-  MOLT_STATUS:    { port: 2411, endpoint: '/molt_status' },
-  MOLT_ME:        { port: 2411, endpoint: '/molt_me' },
-  MOLT_FEED:      { port: 2411, endpoint: '/molt_feed' },
-  MOLT_POST:      { port: 2411, endpoint: '/molt_post' },
-  MOLT_COMMENT:   { port: 2411, endpoint: '/molt_comment' },
-  MOLT_READ:      { port: 2411, endpoint: '/molt_read' },
-  MOLT_UPVOTE:    { port: 2411, endpoint: '/molt_upvote' },
-  MOLT_DOWNVOTE:  { port: 2411, endpoint: '/molt_downvote' },
-  MOLT_SEARCH:    { port: 2411, endpoint: '/molt_search' },
-  MOLT_SUBMOLTS:  { port: 2411, endpoint: '/molt_submolts' },
-  MOLT_SUBSCRIBE: { port: 2411, endpoint: '/molt_subscribe' },
-  MOLT_FOLLOW:    { port: 2411, endpoint: '/molt_follow' },
-  MOLT_PROFILE:   { port: 2411, endpoint: '/molt_profile' },
-  MOLT_VERIFY:    { port: 2411, endpoint: '/molt_verify' },
-  MOLT_DELETE:    { port: 2411, endpoint: '/molt_delete' },
-  MOLT_AGENTS:      { port: 2411, endpoint: '/molt_agents' },
-  MOLT_KEYS_SET:    { port: 2411, endpoint: '/molt_keys_set' },
-  MOLT_KEYS_DELETE: { port: 2411, endpoint: '/molt_keys_delete' },
-  MOLT_NOTIFICATIONS_READ: { port: 2411, endpoint: '/molt_notifications_read' },
-
-  // ── Oracle (port 2412) ──
-  ORACLE_PING: { port: 2412, endpoint: '/ping' },
-  ASK:         { port: 2412, endpoint: '/ask' },
-  SANITY:      { port: 2412, endpoint: '/sanity' },
-  SEE:         { port: 2412, endpoint: '/see' },
-  THINK:       { port: 2412, endpoint: '/think' },
 };
+
+let manifestCache = null;      // raw per-tool manifest data (routes/ui/popup/requires_key)
+let TOOL_ROUTES = { ...LIFECYCLE_ROUTES }; // flat COMMAND -> {port, endpoint}
+let manifestLoadPromise = null;
+
+async function loadManifests(force = false) {
+  if (manifestCache && !force) return manifestCache;
+  if (manifestLoadPromise && !force) return manifestLoadPromise;
+
+  manifestLoadPromise = fetch('http://localhost:2407/manifests')
+    .then(r => { if (!r.ok) throw new Error('status ' + r.status); return r.json(); })
+    .then(manifests => {
+      manifestCache = manifests;
+      TOOL_ROUTES = { ...LIFECYCLE_ROUTES };
+      for (const [name, tool] of Object.entries(manifests)) {
+        for (const [action, endpoint] of Object.entries(tool.routes)) {
+          TOOL_ROUTES[action] = { port: tool.port, endpoint };
+        }
+      }
+      return manifestCache;
+    })
+    .catch(err => {
+      console.warn('[Bracket] Could not load tool manifests — is lifecycle running?', err.message);
+      manifestCache = {};
+      return manifestCache;
+    });
+
+  return manifestLoadPromise;
+}
+
+// Kick off a load at service-worker startup; individual commands still
+// await loadManifests() so a cold-start race never drops a command.
+loadManifests();
 
 // ─── Command Parser ───────────────────────────────────────────────────────────
 
@@ -137,61 +117,98 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // keep the message channel open for async response
   }
 
+  // Manifests / UI data, requested by content.js and popup.js
+  if (msg.type === 'GET_MANIFESTS') {
+    loadManifests().then((manifests) => {
+      sendResponse({ manifests });
+    });
+    return true;
+  }
+
+  // Server-side key status (which required keys are set in .env)
+  if (msg.type === 'GET_KEY_STATUS') {
+    fetch('http://localhost:2407/keys')
+      .then(r => r.json())
+      .then(status => sendResponse({ status }))
+      .catch(err => sendResponse({ error: 'Lifecycle unreachable — ' + err.message }));
+    return true;
+  }
+
+  // Set a server-side key (writes to root .env via lifecycle)
+  if (msg.type === 'SET_KEY') {
+    fetch('http://localhost:2407/set-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: msg.key, value: msg.value }),
+    })
+      .then(r => r.json())
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ ok: false, error: 'Lifecycle unreachable — ' + err.message }));
+    return true;
+  }
+
   if (!msg.command) return;
 
-  const parsed = parseCommand(msg.command);
+  loadManifests().then(() => {
+    const parsed = parseCommand(msg.command);
 
-  if (!parsed) {
-    sendResponse({ error: 'Could not parse command: ' + msg.command });
-    return true;
-  }
+    if (!parsed) {
+      sendResponse({ error: 'Could not parse command: ' + msg.command });
+      return;
+    }
 
-  if (parsed.error) {
-    sendResponse({ error: parsed.error });
-    return true;
-  }
+    if (parsed.error) {
+      sendResponse({ error: parsed.error });
+      return;
+    }
 
-  const { action, params } = parsed;
-  const route = TOOL_ROUTES[action];
+    const { action, params } = parsed;
+    const route = TOOL_ROUTES[action];
 
-  if (!route) {
-    const validCmds = [...new Set(Object.keys(TOOL_ROUTES).filter(k => !k.includes('_') || k === 'TAG_INDEX'))];
-    sendResponse({
-      error: `Unknown command: ${action}. Valid commands: ${validCmds.join(', ')}`
-    });
-    return true;
-  }
-
-  const url = `http://localhost:${route.port}${route.endpoint}`;
-
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-    .then((r) => {
-      if (!r.ok) throw new Error('Server returned ' + r.status);
-      return r.text();
-    })
-    .then((data) => {
-      if (action === 'READ') {
-        data = formatReadResult(data);
-      }
-      sendResponse({ result: data });
-    })
-    .catch((err) => {
-      const toolName = getToolName(route.port);
+    if (!route) {
+      const validCmds = [...new Set(Object.keys(TOOL_ROUTES))];
       sendResponse({
-        error: `${toolName} server unreachable on port ${route.port} — is it running? (${err.message})`
+        error: `Unknown command: ${action}. Valid commands: ${validCmds.join(', ')}`
       });
-    });
+      return;
+    }
+
+    const url = `http://localhost:${route.port}${route.endpoint}`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Server returned ' + r.status);
+        return r.text();
+      })
+      .then((data) => {
+        if (action === 'READ') {
+          data = formatReadResult(data);
+        }
+        sendResponse({ result: data });
+      })
+      .catch((err) => {
+        const toolName = getToolName(route.port);
+        sendResponse({
+          error: `${toolName} server unreachable on port ${route.port} — is it running? (${err.message})`
+        });
+      });
+  });
 
   return true;
 });
 
 function getToolName(port) {
-  const names = { 2407: 'Lifecycle', 2408: 'Memory', 2409: 'Chess', 2410: 'Browse', 2411: 'Moltbook', 2412: 'Oracle' };
-  return names[port] || `Port ${port}`;
+  if (port === 2407) return 'Lifecycle';
+  if (manifestCache) {
+    for (const [name, tool] of Object.entries(manifestCache)) {
+      if (tool.port === port) return tool.ui?.label || name;
+    }
+  }
+  return `Port ${port}`;
 }
 
 // ─── YouTube Tab Watcher ──────────────────────────────────────────────────────
@@ -308,10 +325,16 @@ chrome.tabs.onRemoved.addListener(async () => {
 });
 
 // ─── Steam Presence Watcher ───────────────────────────────────────────────────
+// Steam key/ID are no longer hardcoded — set them from the popup's API Keys
+// panel. They're stored in chrome.storage.local (this machine only, never
+// synced, never committed to the repo).
 
-const STEAM_API_KEY = '955936D332B0F146BE9DAA3C50077687';
-const STEAM_ID      = '76561198316524687';
 const STEAM_POLL_MS = 30000;
+
+async function getSteamCreds() {
+  const data = await chrome.storage.local.get(['steamApiKey', 'steamId']);
+  return { apiKey: data.steamApiKey || null, steamId: data.steamId || null };
+}
 
 async function getLastGame() {
   const data = await chrome.storage.session.get('lastSteamGame');
@@ -324,12 +347,26 @@ async function setLastGame(game) {
 
 async function pollSteam() {
   try {
-    const url = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${STEAM_API_KEY}&steamids=${STEAM_ID}`;
+    const { apiKey, steamId } = await getSteamCreds();
+    if (!apiKey || !steamId) {
+      console.log('[Bracket/Steam] Skipping poll — key or ID not set.');
+      return;
+    }
+
+    const url = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${apiKey}&steamids=${steamId}`;
     const res = await fetch(url);
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.warn(`[Bracket/Steam] API returned ${res.status} ${res.statusText}`);
+      return;
+    }
     const { response } = await res.json();
     const player = response?.players?.[0];
+    if (!player) {
+      console.warn('[Bracket/Steam] No player data returned — check steamId is your numeric SteamID64, and that your Steam profile/game-activity privacy is not set to Private.');
+      return;
+    }
     const currentGame = player?.gameextrainfo || null;
+    console.log('[Bracket/Steam] Poll OK. Current game:', currentGame || '(none)');
 
     const lastGame = await getLastGame();
     if (currentGame === lastGame) return;
@@ -354,7 +391,9 @@ async function pollSteam() {
         chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Bracket/Steam] Poll failed:', err.message);
+  }
 }
 
 // Start polling when service worker starts

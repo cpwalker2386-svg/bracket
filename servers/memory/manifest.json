@@ -1,0 +1,43 @@
+{
+  "name": "memory",
+  "port": 2408,
+  "routes": {
+    "STORE": "/store",
+    "RECONSTRUCT": "/reconstruct",
+    "SEARCH": "/search",
+    "LIST": "/list",
+    "READ": "/read-with-requires",
+    "UPDATE": "/update",
+    "TAGINDEX": "/tag-index",
+    "TAG_INDEX": "/tag-index"
+  },
+  "requires_key": "GEMINI_API_KEY",
+  "ui": {
+    "label": "MEMORY",
+    "icon": "⬡",
+    "colors": { "border": "#facc15", "bg": "#1f2937", "text": "#86efac", "header": "#facc15", "btnBg": "#166534", "btnBorder": "#86efac", "btnText": "#86efac", "resultColor": "#86efac" },
+    "asyncCommands": ["RECONSTRUCT"],
+    "asyncLoadingText": "[Gemini: reconstructing…]",
+    "asyncReadyText": "[Gemini: ready — press Enter to inject result]"
+  },
+  "popup": {
+    "groups": [
+      {
+        "label": "Read",
+        "cmds": [
+          { "cmd": "[(TAGINDEX)]", "desc": "all tags + counts" },
+          { "cmd": "[(SEARCH {\"tags\":\"tag1\",\"limit\":10})]", "desc": "find memories" },
+          { "cmd": "[(LIST {\"limit\":20})]", "desc": "recent memories" },
+          { "cmd": "[(READ {\"id\":\"filename_c91\"})]", "desc": "read + required" }
+        ]
+      },
+      {
+        "label": "Write",
+        "cmds": [
+          { "cmd": "[(STORE {\"tags\":\"…\",\"recipe\":\"…\",\"confidence\":0.9,\"importance\":\"high\",\"model\":\"claude\"})]", "desc": "save memory" },
+          { "cmd": "[(UPDATE {\"id\":\"…\",\"tags\":\"…\",\"recipe\":\"…\"})]", "desc": "update fields" }
+        ]
+      }
+    ]
+  }
+}
