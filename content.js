@@ -307,6 +307,20 @@
     },
   };
 
+  // Lifecycle's own commands aren't in any servers/*/manifest.json — it's the
+  // loader itself, so (like background.js's LIFECYCLE_ROUTES) it gets one
+  // small static entry here instead of being dynamically discovered.
+  const LIFECYCLE_TOOL = {
+    commands: new Set(['SYSTEM', 'README', 'SERVER_START', 'SERVER_STOP', 'SERVER_LIST']),
+    label: 'LIFECYCLE',
+    icon: '⚙',
+    colors: { border: '#6b7280', bg: '#111827', text: '#d1d5db', header: '#9ca3af', btnBg: '#1f2937', btnBorder: '#6b7280', btnText: '#d1d5db', resultColor: '#d1d5db' },
+    asyncCommands: new Set(),
+    asyncLoadingText: null,
+    asyncReadyText: null,
+    preExecute: null,
+  };
+
   function loadTools() {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: 'GET_MANIFESTS' }, (response) => {
@@ -315,7 +329,7 @@
           resolve(false);
           return;
         }
-        TOOLS = {};
+        TOOLS = { lifecycle: LIFECYCLE_TOOL };
         for (const [name, tool] of Object.entries(response.manifests)) {
           TOOLS[name] = {
             commands: new Set(Object.keys(tool.routes)),

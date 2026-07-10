@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const { Chess } = require('chess.js');
 const PORT = process.env.CHESS_PORT || 2409;
-const STOCKFISH_PATH = path.resolve(__dirname, 'node_modules/stockfish/src/stockfish-nnue-16.js');
+const STOCKFISH_PATH = path.resolve(__dirname, 'node_modules/stockfish/bin/stockfish.js');
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 
