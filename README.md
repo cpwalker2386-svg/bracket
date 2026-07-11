@@ -61,6 +61,7 @@ node servers/oracle/server.js
 
 Or have the AI emit lifecycle commands during a chat session — Bracket will render an approval card for each:
 ```
+[(SYSTEM)]
 [(SERVER_START {"name":"memory"})]
 [(SERVER_START {"name":"chess"})]
 [(SERVER_START {"name":"browse"})]
@@ -146,13 +147,6 @@ Get a free key at https://aistudio.google.com/apikey
 5. Add a status row to `popup.html` / `popup.js`
 
 That's it — once these steps are done, the extension will route commands to the new server.
-
----
-
-## Toggle
-
-Each page has a `[ ] BRACKET ON` badge in the bottom-right corner.
-Click it to disable command interception without unloading the extension.
 
 ---
 
