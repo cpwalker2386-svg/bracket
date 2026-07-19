@@ -19,7 +19,6 @@ let manifestLoadPromise = null;
 async function loadManifests(force = false) {
   if (manifestCache && !force) return manifestCache;
   if (manifestLoadPromise && !force) return manifestLoadPromise;
-
   manifestLoadPromise = fetch('http://localhost:2407/manifests')
     .then(r => { if (!r.ok) throw new Error('status ' + r.status); return r.json(); })
     .then(manifests => {
@@ -34,13 +33,12 @@ async function loadManifests(force = false) {
     })
     .catch(err => {
       console.warn('[Bracket] Could not load tool manifests — is lifecycle running?', err.message);
-      manifestCache = {};
-      return manifestCache;
+      manifestCache = null;
+      manifestLoadPromise = null;
+      return null;
     });
-
   return manifestLoadPromise;
 }
-
 // Kick off a load at service-worker startup; individual commands still
 // await loadManifests() so a cold-start race never drops a command.
 loadManifests();
