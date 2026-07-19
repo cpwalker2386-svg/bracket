@@ -12,7 +12,7 @@ For what Bracket is and why it's built this way, see [`README.md`](./README.md).
 
 Any time you change `content.js`, `background.js`, or `manifest.json`, you need to hit the reload icon on the Bracket card in `chrome://extensions` — extension code does not hot-reload. Reload the chat tab afterward too, so `content.js` picks up a fresh service worker.
 
-## 2. Set up API keys (if using Oracle)
+## 2. Set up API keys (if using Oracle or Memory)
 
 Create a `.env` file at the repo root:
 ```
